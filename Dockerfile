@@ -1,6 +1,10 @@
 # 使用官方 Python 3.13 镜像作为基础镜像
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.source="https://github.com/TerraceCN/qwen3-asr-openai"
+LABEL org.opencontainers.image.description="Convert Qwen3 ASR Bailian API to OpenAI-Compatible API."
+LABEL org.opencontainers.image.licenses="MIT"
+
 # 设置工作目录
 WORKDIR /app
 
