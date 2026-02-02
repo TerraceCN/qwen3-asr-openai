@@ -7,7 +7,10 @@ from typing import BinaryIO
 from anyio import to_thread
 from fastapi import UploadFile
 import httpx
+from loguru import logger
 from magika import Magika
+
+BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
 
 magika = Magika()
 
@@ -65,7 +68,7 @@ async def get_upload_policy(api_key: str, model: str) -> dict:
     return json_data["data"]
 
 
-async def upload_file_to_oss(policy: dict, file: UploadFile):
+async def upload_file_to_oss(file: UploadFile, policy: dict):
     root, _ = os.path.splitext(file.filename)
     _, ext = await get_file_content_type(file)
     filename = f"{root}{ext}"
@@ -91,6 +94,23 @@ async def upload_file_to_oss(policy: dict, file: UploadFile):
     return f"oss://{key}"
 
 
-async def upload_file(api_key: str, model: str, file: UploadFile):
+async def upload_file(file: UploadFile, api_key: str, model: str):
     policy = await get_upload_policy(api_key, model)
-    return await upload_file_to_oss(policy, file)
+    return await upload_file_to_oss(file, policy)
+
+
+async def get_input_audio(file: UploadFile, authorization: str, model: str):
+    # 获取文件大小
+    file_size = file.size
+    if not file_size:
+        raise ValueError("File is empty")
+
+    if file_size < BASE64_MAX_FILE_SIZE:  # 小于10M的文件转base64
+        logger.debug(f"file size: {file_size}, using base64")
+        input_audio = await convert_file_to_base64(file)
+    else:  # 大于10M的文件上传到临时OSS
+        logger.debug(f"file size: {file_size}, using oss")
+        input_audio = await upload_file(file, authorization, model)
+        logger.debug(f"input_audio: {input_audio}")
+
+    return input_audio
