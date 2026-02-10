@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from fastapi import FastAPI, Form, Header, UploadFile
+from fastapi import FastAPI, Form, Header, UploadFile, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel
 
@@ -8,6 +8,11 @@ from application.asr.openai import asr_openai
 from application.utils.audio import get_input_audio
 
 BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
+SUPPORTED_ASR_MODELS = {
+    "qwen3-asr-flash": "openai",
+    "qwen3-asr-flash-filetrans": "dashscope",
+    "qwen3-asr-flash-realtime": "websocket",
+}
 
 app = FastAPI()
 
@@ -35,35 +40,28 @@ async def v1_audio_transcriptions(
         model_name = req.model.rstrip(":itn")
 
     logger.debug(f"model: {model_name}, asr_options: {asr_options}")
+    if model_name not in SUPPORTED_ASR_MODELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported model: {model_name}",
+        )
 
     # 获取音频文件数据
     input_audio = await get_input_audio(req.file, authorization, model_name)
-    use_oss = input_audio.startswith("oss://")
 
-    # 构造消息
-    messages: list[dict] = []
-    if req.prompt:
-        messages.append({"role": "system", "content": req.prompt})
-        logger.debug(f"prompt: {req.prompt}")
-    messages.append(
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": input_audio,
-                    },
-                },
-            ],
-        },
-    )
-
-    return await asr_openai(
-        model_name,
-        messages,
-        authorization,
-        asr_options,
-        req.stream,
-        use_oss,
-    )
+    if SUPPORTED_ASR_MODELS[model_name] == "openai":
+        return await asr_openai(
+            model_name,
+            input_audio,
+            authorization,
+            req.prompt,
+            asr_options,
+            req.stream,
+        )
+    elif SUPPORTED_ASR_MODELS[model_name] == "dashscope":
+        raise NotImplementedError("DashScope ASR is not supported yet")
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Model {model_name} does not support "/v1/audio/transcriptions" endpoint',
+        )

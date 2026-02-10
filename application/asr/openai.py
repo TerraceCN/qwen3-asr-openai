@@ -91,7 +91,7 @@ async def _handle_stream(resp: httpx.Response, timer: Timer) -> AsyncIterator[st
         ensure_ascii=False,
     )
     yield f"data: {resp_data}\n\n"
-    
+
     if seconds:
         rtf = round(timer.get_time() / seconds, 2)
     else:
@@ -101,12 +101,30 @@ async def _handle_stream(resp: httpx.Response, timer: Timer) -> AsyncIterator[st
 
 async def asr_openai(
     model: str,
-    messages: list[dict],
+    input_audio: str,
     authorization: str,
+    prompt: str | None = None,
     asr_options: dict | None = None,
     stream: bool = False,
-    use_oss: bool = False,
 ):
+    # 构造消息
+    messages: list[dict] = []
+    if prompt:
+        messages.append({"role": "system", "content": prompt})
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": input_audio,
+                    },
+                },
+            ],
+        },
+    )
+
     # 构造请求参数
     req_json = {"model": model, "messages": messages}
     if asr_options is not None:
@@ -124,7 +142,11 @@ async def asr_openai(
         method="POST",
         url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         json=req_json,
-        headers={"X-DashScope-OssResourceResolve": "enable" if use_oss else "disable"},
+        headers={
+            "X-DashScope-OssResourceResolve": "enable"
+            if input_audio.startswith("oss://")
+            else "disable"
+        },
     )
 
     # 发送请求
