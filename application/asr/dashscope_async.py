@@ -5,10 +5,13 @@ import asyncio
 from fastapi.responses import JSONResponse
 import httpx
 
-ASYNC_TASK_CHECK_INTERVAL = 3
+from application.vars import auth_token
+
+ASYNC_TASK_CHECK_INTERVAL = 1
 
 
-async def parse_result(transcription_url: str, authorization: str):
+async def parse_result(transcription_url: str):
+    authorization = auth_token.get()
     async with httpx.AsyncClient(
         headers={"Authorization": authorization},
         timeout=300,
@@ -36,7 +39,8 @@ async def parse_result(transcription_url: str, authorization: str):
     }
 
 
-async def get_task_result(task_id: str, authorization: str):
+async def get_task_result(task_id: str):
+    authorization = auth_token.get()
     async with httpx.AsyncClient(
         headers={"Authorization": authorization},
         timeout=300,
@@ -58,14 +62,13 @@ async def get_task_result(task_id: str, authorization: str):
             f"ASR task failed, code: {output['code']}, message: {output['message']}"
         )
     elif output["task_status"] == "SUCCEEDED":
-        return await parse_result(output["result"]["transcription_url"], authorization)
+        return await parse_result(output["result"]["transcription_url"])
     else:
         raise ValueError(f"Unknown ASR task status: {output['task_status']}")
 
 async def asr_dashscope_async(
     model: str,
     input_audio: str,
-    authorization: str,
     asr_options: dict | None = None,
 ):
     # 构造请求参数
@@ -74,6 +77,7 @@ async def asr_dashscope_async(
         req_json["parameters"] = asr_options
     
     # 提交任务
+    authorization = auth_token.get()
     async with httpx.AsyncClient(
         headers={"Authorization": authorization},
         timeout=300,
@@ -96,7 +100,7 @@ async def asr_dashscope_async(
     task_id = resp_json["output"]["task_id"]
 
     while True:
-        result = await get_task_result(task_id, authorization)
+        result = await get_task_result(task_id)
 
         if result is None:
             await asyncio.sleep(ASYNC_TASK_CHECK_INTERVAL)

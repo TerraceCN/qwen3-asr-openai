@@ -10,6 +10,8 @@ import httpx
 from loguru import logger
 from magika import Magika
 
+from application.vars import auth_token
+
 BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
 
 magika = Magika()
@@ -52,9 +54,10 @@ async def convert_file_to_base64(file: UploadFile):
     return f"data:{content_type};base64,{file_b64}"
 
 
-async def get_upload_policy(api_key: str, model: str) -> dict:
+async def get_upload_policy(model: str) -> dict:
+    authorization = auth_token.get()
     async with httpx.AsyncClient(
-        headers={"Authorization": f"Bearer {api_key}"},
+        headers={"Authorization": authorization},
     ) as client:
         res = await client.get(
             "https://dashscope.aliyuncs.com/api/v1/uploads",
@@ -94,13 +97,13 @@ async def upload_file_to_oss(file: UploadFile, policy: dict):
     return f"oss://{key}"
 
 
-async def upload_file(file: UploadFile, api_key: str, model: str):
-    policy = await get_upload_policy(api_key, model)
+async def upload_file(file: UploadFile, model: str):
+    policy = await get_upload_policy(model)
     return await upload_file_to_oss(file, policy)
 
 
 async def get_input_audio(
-    file: UploadFile, authorization: str, model: str, force_oss: bool = False
+    file: UploadFile, model: str, force_oss: bool = False
 ):
     # 获取文件大小
     file_size = file.size
@@ -112,7 +115,7 @@ async def get_input_audio(
         input_audio = await convert_file_to_base64(file)
     else:  # 大于10M的文件上传到临时OSS
         logger.debug(f"file size: {file_size}, using oss")
-        input_audio = await upload_file(file, authorization, model)
+        input_audio = await upload_file(file, model)
         logger.debug(f"input_audio: {input_audio}")
 
     return input_audio

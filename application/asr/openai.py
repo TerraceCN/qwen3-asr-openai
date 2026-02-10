@@ -8,6 +8,7 @@ import httpx
 from loguru import logger
 
 from application.utils.timer import Timer
+from application.vars import auth_token
 
 BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
 
@@ -102,7 +103,6 @@ async def _handle_stream(resp: httpx.Response, timer: Timer) -> AsyncIterator[st
 async def asr_openai(
     model: str,
     input_audio: str,
-    authorization: str,
     prompt: str | None = None,
     asr_options: dict | None = None,
     stream: bool = False,
@@ -134,6 +134,7 @@ async def asr_openai(
         req_json["stream_options"] = {"include_usage": True}
 
     # 构造请求
+    authorization = auth_token.get()
     client = httpx.AsyncClient(
         headers={"Authorization": authorization},
         timeout=300,

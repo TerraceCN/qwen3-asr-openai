@@ -1,11 +1,22 @@
 # -*- coding: utf-8 -*-
 
-from fastapi import FastAPI, Form, Header, UploadFile, HTTPException, status
+from typing import Callable, Awaitable
+
+from fastapi import (
+    FastAPI,
+    Request,
+    Response,
+    Form,
+    UploadFile,
+    HTTPException,
+    status,
+)
 from loguru import logger
 from pydantic import BaseModel
 
 from application.asr import asr_openai, asr_dashscope_async
 from application.utils.audio import get_input_audio
+from application.vars import auth_token
 
 BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
 SUPPORTED_ASR_MODELS = {
@@ -14,6 +25,23 @@ SUPPORTED_ASR_MODELS = {
 }
 
 app = FastAPI()
+
+
+@app.middleware("http")
+async def set_auth_token(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+):
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization required",
+        )
+    token = auth_token.set(authorization)
+    try:
+        return await call_next(request)
+    finally:
+        auth_token.reset(token)
 
 
 class AudioTranscriptionReq(BaseModel):
@@ -25,10 +53,7 @@ class AudioTranscriptionReq(BaseModel):
 
 
 @app.post("/v1/audio/transcriptions")
-async def v1_audio_transcriptions(
-    req: AudioTranscriptionReq = Form(...),
-    authorization: str = Header(...),
-):
+async def v1_audio_transcriptions(req: AudioTranscriptionReq = Form(...)):
     # 解析模型名和ASR参数
     model_name = req.model
     asr_options = {}
@@ -46,11 +71,10 @@ async def v1_audio_transcriptions(
         )
 
     if SUPPORTED_ASR_MODELS[model_name] == "openai":
-        input_audio = await get_input_audio(req.file, authorization, model_name)
+        input_audio = await get_input_audio(req.file, model_name)
         return await asr_openai(
             model_name,
             input_audio,
-            authorization,
             req.prompt,
             asr_options,
             req.stream,
@@ -61,11 +85,10 @@ async def v1_audio_transcriptions(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f'Model "{model_name}" does not support streaming',
             )
-        input_audio = await get_input_audio(req.file, authorization, model_name, force_oss=True)
+        input_audio = await get_input_audio(req.file, model_name, force_oss=True)
         return await asr_dashscope_async(
             model_name,
             input_audio,
-            authorization,
             asr_options,
         )
     else:
