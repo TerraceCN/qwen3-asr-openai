@@ -99,13 +99,15 @@ async def upload_file(file: UploadFile, api_key: str, model: str):
     return await upload_file_to_oss(file, policy)
 
 
-async def get_input_audio(file: UploadFile, authorization: str, model: str):
+async def get_input_audio(
+    file: UploadFile, authorization: str, model: str, force_oss: bool = False
+):
     # 获取文件大小
     file_size = file.size
     if not file_size:
         raise ValueError("File is empty")
 
-    if file_size < BASE64_MAX_FILE_SIZE:  # 小于10M的文件转base64
+    if file_size < BASE64_MAX_FILE_SIZE and not force_oss:  # 小于10M的文件转base64
         logger.debug(f"file size: {file_size}, using base64")
         input_audio = await convert_file_to_base64(file)
     else:  # 大于10M的文件上传到临时OSS

@@ -156,7 +156,7 @@ async def asr_openai(
     if resp.is_error:
         await resp.aread()
         assert resp.is_success, (
-            f"Failed to call dashscope, HTTP {resp.status_code}: {resp.text!r}"
+            f"Failed to call ASR, HTTP {resp.status_code}: {resp.text!r}"
         )
 
     if not stream:

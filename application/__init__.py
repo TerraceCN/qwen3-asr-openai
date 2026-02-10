@@ -4,14 +4,13 @@ from fastapi import FastAPI, Form, Header, UploadFile, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel
 
-from application.asr.openai import asr_openai
+from application.asr import asr_openai, asr_dashscope_async
 from application.utils.audio import get_input_audio
 
 BASE64_MAX_FILE_SIZE = (1024 * 1024 * 10) / 1.334
 SUPPORTED_ASR_MODELS = {
     "qwen3-asr-flash": "openai",
-    "qwen3-asr-flash-filetrans": "dashscope",
-    "qwen3-asr-flash-realtime": "websocket",
+    "qwen3-asr-flash-filetrans": "dashscope_async",
 }
 
 app = FastAPI()
@@ -46,10 +45,8 @@ async def v1_audio_transcriptions(
             detail=f"Unsupported model: {model_name}",
         )
 
-    # 获取音频文件数据
-    input_audio = await get_input_audio(req.file, authorization, model_name)
-
     if SUPPORTED_ASR_MODELS[model_name] == "openai":
+        input_audio = await get_input_audio(req.file, authorization, model_name)
         return await asr_openai(
             model_name,
             input_audio,
@@ -58,8 +55,19 @@ async def v1_audio_transcriptions(
             asr_options,
             req.stream,
         )
-    elif SUPPORTED_ASR_MODELS[model_name] == "dashscope":
-        raise NotImplementedError("DashScope ASR is not supported yet")
+    elif SUPPORTED_ASR_MODELS[model_name] == "dashscope_async":
+        if req.stream:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'Model "{model_name}" does not support streaming',
+            )
+        input_audio = await get_input_audio(req.file, authorization, model_name, force_oss=True)
+        return await asr_dashscope_async(
+            model_name,
+            input_audio,
+            authorization,
+            asr_options,
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
