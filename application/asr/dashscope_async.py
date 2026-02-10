@@ -1,16 +1,30 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import time
 
 from fastapi.responses import JSONResponse
 import httpx
+from loguru import logger
 
 from application.vars import auth_token
 
 ASYNC_TASK_CHECK_INTERVAL = 1
 
 
-async def parse_result(transcription_url: str):
+async def parse_result(resp_json: dict):
+    transcription_url = resp_json["output"]["result"]["transcription_url"]
+
+    scheduled_time = time.strptime(resp_json["output"]["scheduled_time"], "%Y-%m-%d %H:%M:%S.%f")
+    end_time = time.strptime(resp_json["output"]["end_time"], "%Y-%m-%d %H:%M:%S.%f")
+    time_usage = time.mktime(end_time) - time.mktime(scheduled_time)
+    seconds = resp_json["usage"]["seconds"]
+    rtf = time_usage / seconds
+    if time_usage >= 1:
+        time_usage_str = f"{time_usage:.2f}s"
+    else:
+        time_usage_str = f"{time_usage * 1000:.2f}ms"
+
     authorization = auth_token.get()
     async with httpx.AsyncClient(
         headers={"Authorization": authorization},
@@ -23,9 +37,12 @@ async def parse_result(transcription_url: str):
 
     resp_json = resp.json()
     transcript = resp_json["transcripts"][0]
+    text = transcript["text"]
+
+    logger.debug(f"time: {time_usage_str}, RTF: {rtf:.2f}, transcription: {text!r}")
 
     return {
-        "text": transcript["text"],
+        "text": text,
         "usage": {
             "type": "tokens",
             "input_tokens": 0,
@@ -55,16 +72,16 @@ async def get_task_result(task_id: str):
 
     resp_json = resp.json()
     output = resp_json["output"]
-    if output["task_status"] == "RUNNING":
-        return None
-    elif output["task_status"] == "FAILED":
+    task_status = output["task_status"]
+    logger.debug(f"ASR task {task_id}: {task_status}")
+    if task_status == "FAILED":
         raise Exception(
             f"ASR task failed, code: {output['code']}, message: {output['message']}"
         )
-    elif output["task_status"] == "SUCCEEDED":
-        return await parse_result(output["result"]["transcription_url"])
-    else:
-        raise ValueError(f"Unknown ASR task status: {output['task_status']}")
+    elif task_status == "SUCCEEDED":
+        return await parse_result(resp_json)
+    
+    return None
 
 async def asr_dashscope_async(
     model: str,
@@ -98,6 +115,7 @@ async def asr_dashscope_async(
 
     resp_json = resp.json()
     task_id = resp_json["output"]["task_id"]
+    logger.debug(f"ASR task created, task_id: {task_id}")
 
     while True:
         result = await get_task_result(task_id)

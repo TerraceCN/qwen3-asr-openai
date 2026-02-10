@@ -21,9 +21,9 @@ async def _handle_non_stream(resp: httpx.Response, timer: Timer):
     assert len(choices) == 1
     text = choices[0]["message"]["content"]
     usage = resp_json["usage"]
-    rtf = round(timer.get_time() / usage["seconds"], 2)
+    rtf = timer.get_time() / usage["seconds"]
 
-    logger.debug(f"time: {timer}, RTF: {rtf}, transcription: {text!r}")
+    logger.debug(f"time: {timer}, RTF: {rtf:.2f}, transcription: {text!r}")
 
     return {
         "text": text,
@@ -94,10 +94,10 @@ async def _handle_stream(resp: httpx.Response, timer: Timer) -> AsyncIterator[st
     yield f"data: {resp_data}\n\n"
 
     if seconds:
-        rtf = round(timer.get_time() / seconds, 2)
+        rtf = timer.get_time() / seconds
     else:
         rtf = None
-    logger.debug(f"time: {timer}, RTF: {rtf}, transcription: {text!r}")
+    logger.debug(f"time: {timer}, RTF: {rtf:.2f}, transcription: {text!r}")
 
 
 async def asr_openai(
