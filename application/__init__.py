@@ -11,7 +11,6 @@ from fastapi import (
     HTTPException,
     status,
 )
-from loguru import logger
 from pydantic import BaseModel
 
 from application.asr import asr_openai, asr_dashscope_async
@@ -54,16 +53,13 @@ class AudioTranscriptionReq(BaseModel):
 
 @app.post("/v1/audio/transcriptions")
 async def v1_audio_transcriptions(req: AudioTranscriptionReq = Form(...)):
-    # 解析模型名和ASR参数
+    # 解析模型名和itn参数
     model_name = req.model
-    asr_options = {}
-    if req.language:  # 语言
-        asr_options["language"] = req.language
+    enable_itn = False
     if req.model.endswith(":itn"):  # 逆文本标准化
-        asr_options["enable_itn"] = True
+        enable_itn = True
         model_name = req.model.rstrip(":itn")
 
-    logger.debug(f"model: {model_name}, asr_options: {asr_options}")
     if model_name not in SUPPORTED_ASR_MODELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -75,9 +71,10 @@ async def v1_audio_transcriptions(req: AudioTranscriptionReq = Form(...)):
         return await asr_openai(
             model_name,
             input_audio,
-            req.prompt,
-            asr_options,
-            req.stream,
+            stream=req.stream,
+            prompt=req.prompt,
+            language=req.language,
+            enable_itn=enable_itn,
         )
     elif SUPPORTED_ASR_MODELS[model_name] == "dashscope_async":
         if req.stream:
@@ -89,7 +86,8 @@ async def v1_audio_transcriptions(req: AudioTranscriptionReq = Form(...)):
         return await asr_dashscope_async(
             model_name,
             input_audio,
-            asr_options,
+            language=req.language,
+            enable_itn=enable_itn,
         )
     else:
         raise HTTPException(

@@ -15,7 +15,9 @@ ASYNC_TASK_CHECK_INTERVAL = 1
 async def parse_result(resp_json: dict):
     transcription_url = resp_json["output"]["result"]["transcription_url"]
 
-    scheduled_time = time.strptime(resp_json["output"]["scheduled_time"], "%Y-%m-%d %H:%M:%S.%f")
+    scheduled_time = time.strptime(
+        resp_json["output"]["scheduled_time"], "%Y-%m-%d %H:%M:%S.%f"
+    )
     end_time = time.strptime(resp_json["output"]["end_time"], "%Y-%m-%d %H:%M:%S.%f")
     time_usage = time.mktime(end_time) - time.mktime(scheduled_time)
     seconds = resp_json["usage"]["seconds"]
@@ -80,19 +82,33 @@ async def get_task_result(task_id: str):
         )
     elif task_status == "SUCCEEDED":
         return await parse_result(resp_json)
-    
+
     return None
+
 
 async def asr_dashscope_async(
     model: str,
     input_audio: str,
-    asr_options: dict | None = None,
+    *,
+    language: str | None = None,
+    enable_itn: bool = False,
+    enable_words: bool = False,
+    channel_id: list[int] | None = None,
 ):
     # 构造请求参数
-    req_json = {"model": model, "input": {"file_url": input_audio}}
-    if asr_options is not None:
-        req_json["parameters"] = asr_options
-    
+    parameters = {
+        "enable_itn": enable_itn,
+        "enable_words": enable_words,
+        "channel_id": channel_id or [0],
+    }
+    if language:
+        parameters["language"] = language
+    req_json = {
+        "model": model,
+        "input": {"file_url": input_audio},
+        "parameters": parameters,
+    }
+
     # 提交任务
     authorization = auth_token.get()
     async with httpx.AsyncClient(

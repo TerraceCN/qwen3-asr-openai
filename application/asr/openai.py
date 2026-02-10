@@ -103,9 +103,11 @@ async def _handle_stream(resp: httpx.Response, timer: Timer) -> AsyncIterator[st
 async def asr_openai(
     model: str,
     input_audio: str,
-    prompt: str | None = None,
-    asr_options: dict | None = None,
+    *,
     stream: bool = False,
+    prompt: str | None = None,
+    language: str | None = None,
+    enable_itn: bool = False,
 ):
     # 构造消息
     messages: list[dict] = []
@@ -126,12 +128,16 @@ async def asr_openai(
     )
 
     # 构造请求参数
-    req_json = {"model": model, "messages": messages}
-    if asr_options is not None:
-        req_json["asr_options"] = asr_options
+    req_json = {
+        "model": model,
+        "messages": messages,
+        "asr_options": {"enable_itn": enable_itn},
+    }
     if stream:
         req_json["stream"] = True
         req_json["stream_options"] = {"include_usage": True}
+    if language:
+        req_json["asr_options"]["language"] = language
 
     # 构造请求
     authorization = auth_token.get()

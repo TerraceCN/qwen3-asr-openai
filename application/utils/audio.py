@@ -102,9 +102,7 @@ async def upload_file(file: UploadFile, model: str):
     return await upload_file_to_oss(file, policy)
 
 
-async def get_input_audio(
-    file: UploadFile, model: str, force_oss: bool = False
-):
+async def get_input_audio(file: UploadFile, model: str, force_oss: bool = False):
     # 获取文件大小
     file_size = file.size
     if not file_size:
